@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>เกมคณิตศาสตร์ AR: บวก-ลบจำนวนเต็ม ม.1</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600;800&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        :root {
+            --font-main: 'Kanit', sans-serif;
+            --bg-pastel: linear-gradient(135deg, #e0f2fe, #fce7f3);
+            --btn-color: #a78bfa;
+            --btn-hover: #8b5cf6;
+            --correct-color: #bbf7d0;
+            --wrong-color: #fecaca;
+            --panel-color: rgba(255, 255, 255, 0.85);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            font-family: var(--font-main);
+            background: #f3f4f6;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            max-width: 1280px;
+            max-height: 720px;
+            background: var(--bg-pastel);
+            overflow: hidden;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+            border-radius: 16px;
+        }
+
+        /* กล้องเว็บแคม (ซ่อนซ้อนไว้มุมซ้ายล่าง พลิกกระจกเงา) */
+        #webcam {
+            position: absolute;
+            width: 200px;
+            height: 150px;
+            bottom: 15px;
+            left: 15px;
+            transform: scaleX(-1);
+            border: 4px solid #fff;
+            border-radius: 12px;
+            z-index: 10;
+            background: #333;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        #ar-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 9;
+            pointer-events: none;
+        }
+
+        /* ---------------- หน้าจอทั่วไป ---------------- */
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            padding: 30px;
+        }
+
+        .hide { display: none !important; }
+
+        .title-panel {
+            background: var(--panel-color);
+            border: 4px solid #ddd6fe;
+            border-radius: 24px;
+            padding: 20px 40px;
+            text-align: center;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+        }
+
+        .game-title {
+            font-size: clamp(1.8rem, 4.5vw, 3rem);
+            font-weight: 800;
+            color: #5b21b6;
+        }
+
+        .card-info {
+            background: white;
+            border-radius: 20px;
+            padding: 25px 35px;
+            max-width: 650px;
+            box-width: 100%;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            color: #4b5563;
+            margin-bottom: 35px;
+        }
+
+        .card-info h3 {
+            text-align: center;
+            color: #7c3aed;
+            margin-bottom: 20px;
+            font-size: clamp(1.2rem, 3vw, 1.6rem);
+        }
+
+        .step-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            font-size: clamp(1rem, 2vw, 1.25rem);
+            font-weight: 600;
+        }
+
+        .step-num {
+            background: #f43f5e;
+            color: white;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+
+        .btn-action {
+            font-family: var(--font-main);
+            font-size: clamp(1.4rem, 3.5vw, 2rem);
+            font-weight: 800;
+            padding: 15px 60px;
+            background: var(--btn-color);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 8px 0 #7c3aed, 0 12px 20px rgba(0,0,0,0.15);
+            transition: all 0.1s ease;
+        }
+        .btn-action:hover { background: var(--btn-hover); }
+        .btn-action:active {
+            transform: translateY(6px);
+            box-shadow: 0 2px 0 #7c3aed, 0 4px 10px rgba(0,0,0,0.15);
+        }
+
+        /* ---------------- หน้าจอเล่นเกม ---------------- */
+        #hud-bar {
+            position: absolute;
+            top: 20px;
+            width: 90%;
+            display: flex;
+            justify-content: space-between;
+            z-index: 25;
+            pointer-events: none;
+        }
+
+        .hud-item {
+            background: var(--panel-color);
+            border: 3px solid #e9d5ff;
+            padding: 10px 25px;
+            border-radius: 18px;
+            color: #4c1d95;
+            font-size: clamp(1.1rem, 2.5vw, 1.6rem);
+            font-weight: 800;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        }
+
+        #hand-warning {
+            position: absolute;
+            top: 100px;
+            background: rgba(239, 68, 68, 0.9);
+            color: white;
+            padding: 12px 25px;
+            border-radius: 20px;
+            font-size: clamp(1.1rem, 2.5vw, 1.5rem);
+            font-weight: 600;
+            z-index: 30;
+            box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+        }
+
+        #question-container {
+            position: absolute;
+            top: 120px;
+            background: white;
+            padding: 20px 60px;
+            border-radius: 25px;
+            border: 4px solid #ddd6fe;
+            font-size: clamp(2rem, 6vw, 4rem);
+            font-weight: 800;
+            color: #2e1065;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.05);
+            z-index: 22;
+        }
+
+        #options-container {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 50px;
+            margin-top: 160px;
+            z-index: 21;
+        }
+
+        .choice-box {
+            width: 42%;
+            height: 250px;
+            background: var(--panel-color);
+            border: 5px dashed #c084fc;
+            border-radius: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: clamp(3rem, 8vw, 5.5rem);
+            font-weight: 800;
+            color: #4c1d95;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+            transition: all 0.2s ease;
+        }
+
+        .choice-box.hovered {
+            transform: scale(1.03);
+            border-style: solid;
+            background: #f3e8ff;
+        }
+
+        .choice-box.correct { background: var(--correct-color) !important; border-color: #4ade80 !important; color: #166534; }
+        .choice-box.wrong { background: var(--wrong-color) !important; border-color: #f87171 !important; color: #991b1b; }
+
+        /* ---------------- หน้าสรุปคะแนน ---------------- */
+        .score-card {
+            background: white;
+            border-radius: 28px;
+            padding: 40px;
+            width: 90%;
+            max-width: 500px;
+            text-align: center;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.08);
+            margin-bottom: 35px;
+        }
+        .end-status { font-size: 2.2rem; color: #6d28d9; font-weight: 800; margin-bottom: 10px; }
+        .total-score { font-size: 5.5rem; font-weight: 800; color: #10b981; margin: 10px 0; }
+        .feedback { font-size: 1.3rem; color: #6b7280; font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="ar-canvas"></canvas>
+
+    <div id="start-screen" class="screen">
+        <div class="title-panel">
+            <div class="game-title">📐 เกมคณิตศาสตร์ AR จำนวนเต็ม ม.1</div>
+            <div style="font-size: 1.2rem; color: #6b7280; margin-top: 5px;">เรื่อง การบวกและลบจำนวนเต็ม</div>
+        </div>
+        
+        <div class="card-info">
+            <h3>💡 วิธีการควบคุมและกติกาการเล่น</h3>
+            <div class="step-item"><div class="step-num">1</div><span>เปิดกล้องเว็บแคม และยืนห่างให้ระบบมองเห็นมือของนักเรียน</span></div>
+            <div class="step-item"><div class="step-num">2</div><span>ชี้ปลายนิ้วไปที่กล่องคำตอบ (ซ้าย หรือ ขวา) เพื่อเลือกคำตอบ</span></div>
+            <div class="step-item"><div class="step-num">3</div><span><b>ค้างมือไว้ในกล่อง 40 เฟรม</b> เพื่อยืนยันคำตอบ (วงกลมโหลดเต็มวง)</span></div>
+            <div class="step-item"><div class="step-num">4</div><span>มีเวลาทำข้อละ 2 นาที ทั้งหมด 10 ข้อ ตอบถูกรับคะแนนไปเลย!</span></div>
+        </div>
+
+        <button class="btn-action" id="btn-start">เริ่มเล่นเกม 🚀</button>
+    </div>
+
+    <div id="play-screen" class="screen hide">
+        <div id="hud-bar">
+            <div class="hud-item" id="hud-progress">📝 ข้อที่: 1/10</div>
+            <div class="hud-item" id="hud-timer">⏳ เวลา: 120 วินาที</div>
+            <div class="hud-item" id="hud-score">🏆 คะแนน: 0</div>
+        </div>
+
+        <div id="hand-warning" class="hide">🖐️ ตรวจไม่พบมือ! กรุณายกมือขึ้นชี้ให้ตรงกับกล้อง</div>
+
+        <div id="question-container">(-5) + 8</div>
+
+        <div id="options-container">
+            <div class="choice-box" id="choice-left" data-side="left">?</div>
+            <div class="choice-box" id="choice-right" data-side="right">?</div>
+        </div>
+    </div>
+
+    <div id="end-screen" class="screen hide">
+        <div class="title-panel"><div class="game-title">🎉 จบการแข่งขัน!</div></div>
+        <div class="score-card">
+            <div class="end-status" id="praise-txt">เก่งมากเลย!</div>
+            <div>คุณทำคะแนนรวมไปได้ทั้งหมด</div>
+            <div class="total-score" id="score-total">0</div>
+            <div class="feedback" id="score-feedback">ตอบถูกทั้งหมด 0 จาก 10 ข้อ</div>
+        </div>
+        <button class="btn-action" id="btn-restart">เล่นอีกครั้ง 🔄</button>
+    </div>
+</div>
+
+<script>
+    // --- ธนาคารโจทย์คำถาม 10 ข้อที่กำหนด ---
+    const quizBank = [
+        { q: "(-5) + 8", ans: 3, fake: -3 },
+        { q: "7 + (-12)", ans: -5, fake: 5 },
+        { q: "(-4) + (-6)", ans: -10, fake: -2 },
+        { q: "0 + (-9)", ans: -9, fake: 9 },
+        { q: "15 - 20", ans: -5, fake: 5 },
+        { q: "(-3) - 7", ans: -10, fake: -4 },
+        { q: "10 - (-5)", ans: 15, fake: 5 },
+        { q: "(-8) - (-3)", ans: -5, fake: -11 },
+        { q: "(-6) + 6", ans: 0, fake: -12 },
+        { q: "4 - 9 + (-2)", ans: -7, fake: -3 }
+    ];
+
+    // --- ตัวแปรควบคุมระบบเกม ---
+    let currentIdx = 0;
+    let totalScore = 0;
+    let correctCount = 0;
+    let itemTimeLeft = 120;
+    let timerInterval = null;
+    let isGameRunning = false;
+    let lockSelection = false; // ล็อกฟังก์ชันชั่วขณะช่วงโชว์เฉลยสีเขียว/แดง
+
+    // ระบบจับเวลาโฮเวอร์ (นับสเตจเป็นจำนวนรอบการคำนวณของกล้อง: 40 เฟรม)
+    const HOVER_LIMIT = 40; 
+    let currentHoverTarget = null; // 'left', 'right' หรือ null
+    let hoverProgress = 0;
+
+    // ระบบติดตามมือและพิกัด AR
+    let userFingertips = [];
+
+    // --- ผูก DOM Element ---
+    const startScreen = document.getElementById('start-screen');
+    const playScreen = document.getElementById('play-screen');
+    const endScreen = document.getElementById('end-screen');
+    const qContainer = document.getElementById('question-container');
+    const boxLeft = document.getElementById('choice-left');
+    const boxRight = document.getElementById('choice-right');
+    
+    const hudProgress = document.getElementById('hud-progress');
+    const hudTimer = document.getElementById('hud-timer');
+    const hudScore = document.getElementById('hud-score');
+    const handWarning = document.getElementById('hand-warning');
+    
+    const scoreTotal = document.getElementById('score-total');
+    const scoreFeedback = document.getElementById('score-feedback');
+    const praiseTxt = document.getElementById('praise-txt');
+
+    const videoEl = document.getElementById('webcam');
+    const canvasEl = document.getElementById('ar-canvas');
+    const ctx = canvasEl.getContext('2d');
+
+    // --- สังเคราะห์เสียงเอฟเฟกต์ด้วย Web Audio API ---
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+    function triggerSound(style) {
+        if (audioContext.state === 'suspended') audioContext.resume();
+        const osc = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        osc.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        if (style === 'correct') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(587.33, audioContext.currentTime); // D5
+            osc.frequency.exponentialRampToValueAtTime(1174.66, audioContext.currentTime + 0.15); // D6
+            gainNode.gain.setValueAtTime(0.25, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+            osc.start(); osc.stop(audioContext.currentTime + 0.3);
+        } else if (style === 'wrong') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(220, audioContext.currentTime); // A3
+            osc.frequency.linearRampToValueAtTime(146.83, audioContext.currentTime + 0.25); // D3
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+            osc.start(); osc.stop(audioContext.currentTime + 0.3);
+        } else if (style === 'click') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(800, audioContext.currentTime);
+            gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.05);
+            osc.start(); osc.stop(audioContext.currentTime + 0.06);
+        }
+    }
+
+    // --- รีไซส์แคนวาสให้พอดีจอ ---
+    function setupCanvasSize() {
+        canvasEl.width = window.innerWidth;
+        canvasEl.height = window.innerHeight;
+    }
+    window.addEventListener('resize', setupCanvasSize);
+    setupCanvasSize();
+
+    // --- เริ่มต้นใช้งานระบบตรวจจับมือ MediaPipe ---
+    const handsEngine = new Hands({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+
+    handsEngine.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 0, // รันแบบสเปกต่ำ ประหยัด CPU
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+    });
+
+    handsEngine.onResults((results) => {
+        userFingertips = [];
+        
+        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+            handWarning.classList.add('hide');
+            const landmarks = results.multiHandLandmarks[0];
+            // ข้อนิ้ว 8 = INDEX_FINGER_TIP (ปลายนิ้วชี้)
+            const tip = landmarks[8];
+            const screenX = (1 - tip.x) * window.innerWidth; // กลับกระจกเงา
+            const screenY = tip.y * window.innerHeight;
+            
+            userFingertips.push({ x: screenX, y: screenY });
+
+            if (isGameRunning && !lockSelection) {
+                evaluateFingerHover(screenX, screenY);
+            }
+        } else {
+            if (isGameRunning) {
+                handWarning.classList.remove('hide');
+                resetHoverProgress();
+            }
+        }
+        renderARGraphics();
+    });
+
+    // เริ่มกล้องถ่ายภาพ
+    const cameraHelper = new Camera(videoEl, {
+        onFrame: async () => { await handsEngine.send({ image: videoEl }); },
+        width: 640,
+        height: 480
+    });
+    cameraHelper.start().catch(() => {
+        alert("ไม่สามารถเชื่อมต่อกล้องได้ โปรดอนุญาตสิทธิ์เข้าถึงกล้องถ่ายรูป");
+    });
+
+    // --- ตรวจเช็กว่าปลายนิ้วชี้อยู่ในกล่องคำตอบไหนหรือไม่ ---
+    function evaluateFingerHover(fx, fy) {
+        const rLeft = boxLeft.getBoundingClientRect();
+        const rRight = boxRight.getBoundingClientRect();
+        let currentDetectedSide = null;
+
+        if (fx >= rLeft.left && fx <= rLeft.right && fy >= rLeft.top && fy <= rLeft.bottom) {
+            currentDetectedSide = 'left';
+        } else if (fx >= rRight.left && fx <= rRight.right && fy >= rRight.top && fy <= rRight.bottom) {
+            currentDetectedSide = 'right';
+        }
+
+        if (currentDetectedSide) {
+            if (currentHoverTarget === currentDetectedSide) {
+                hoverProgress++;
+                if (hoverProgress % 10 === 0 && hoverProgress < HOVER_LIMIT) {
+                    triggerSound('click');
+                }
+                if (hoverProgress >= HOVER_LIMIT) {
+                    processChoiceSelection(currentDetectedSide);
+                }
+            } else {
+                currentHoverTarget = currentDetectedSide;
+                hoverProgress = 1;
+                highlightBoxes(currentDetectedSide);
+            }
+        } else {
+            resetHoverProgress();
+        }
+    }
+
+    function resetHoverProgress() {
+        currentHoverTarget = null;
+        hoverProgress = 0;
+        highlightBoxes(null);
+    }
+
+    function highlightBoxes(side) {
+        boxLeft.classList.remove('hovered');
+        boxRight.classList.remove('hovered');
+        if (side === 'left') boxLeft.classList.add('hovered');
+        if (side === 'right') boxRight.classList.add('hovered');
+    }
+
+    // --- แสดงวงกลมความคืบหน้า (Progress Circle) รอบนิ้วมือผู้เล่น ---
+    function renderARGraphics() {
+        ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+        
+        userFingertips.forEach(finger => {
+            // วาดจุดเป้าหมายตรงปลายนิ้ว
+            ctx.beginPath();
+            ctx.arc(finger.x, finger.y, 10, 0, 2 * Math.PI);
+            ctx.fillStyle = '#c084fc';
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#ffffff';
+            ctx.stroke();
+
+            // วาดวงกลมความคืบหน้าเมื่อโฮเวอร์กล่องคำตอบสำเร็จ
+            if (hoverProgress > 0) {
+                const percentage = hoverProgress / HOVER_LIMIT;
+                ctx.beginPath();
+                ctx.arc(finger.x, finger.y, 30, -Math.PI / 2, (-Math.PI / 2) + (2 * Math.PI * percentage));
+                ctx.lineWidth = 6;
+                ctx.strokeStyle = '#f43f5e';
+                ctx.stroke();
+            }
+        });
+    }
+
+    // --- จัดการข้อมูลและเปลี่ยนโจทย์คำถาม ---
+    function presentQuestion() {
+        if (currentIdx >= quizBank.length) {
+            finishGame();
+            return;
+        }
+
+        lockSelection = false;
+        itemTimeLeft = 120;
+        resetHoverProgress();
+        
+        boxLeft.className = "choice-box";
+        boxRight.className = "choice-box";
+        
+        hudProgress.textContent = `📝 ข้อที่: ${currentIdx + 1}/${quizBank.length}`;
+        hudTimer.textContent = `⏳ เวลา: ${itemTimeLeft} วินาที`;
+
+        const data = quizBank[currentIdx];
+        qContainer.textContent = data.q;
+
+        // สุ่มสลับที่นั่งซ้าย-ขวาของตัวเลือก
+        const setLeftCorrect = Math.random() < 0.5;
+        if (setLeftCorrect) {
+            boxLeft.textContent = data.ans;
+            boxLeft.dataset.isCorrect = "yes";
+            boxRight.textContent = data.fake;
+            boxRight.dataset.isCorrect = "no";
+        } else {
+            boxLeft.textContent = data.fake;
+            boxLeft.dataset.isCorrect = "no";
+            boxRight.textContent = data.ans;
+            boxRight.dataset.isCorrect = "yes";
+        }
+    }
+
+    // --- ประมวลผลเมื่อเลือกคำตอบ ---
+    function processChoiceSelection(side) {
+        lockSelection = true;
+        const targetBox = (side === 'left') ? boxLeft : boxRight;
+        const opposingBox = (side === 'left') ? boxRight : boxLeft;
+        const isCorrect = targetBox.dataset.isCorrect === "yes";
+
+        if (isCorrect) {
+            targetBox.classList.add('correct');
+            totalScore += 10;
+            correctCount++;
+            triggerSound('correct');
+            hudScore.textContent = `🏆 คะแนน: ${totalScore}`;
+        } else {
+            targetBox.classList.add('wrong');
+            opposingBox.classList.add('correct'); // แฟลชกล่องที่ถูกต้องให้เด็กดูเฉลย
+            triggerSound('wrong');
+        }
+
+        // หน่วงเวลา 2.5 วินาทีเพื่อให้เห็นผลลัพธ์ ก่อนย้ายไปข้อถัดไป
+        setTimeout(() => {
+            currentIdx++;
+            presentQuestion();
+        }, 2500);
+    }
+
+    // --- ระบบเวลานับถอยหลังต่อข้อ ---
+    function runTimerEngine() {
+        timerInterval = setInterval(() => {
+            if (lockSelection || !isGameRunning) return;
+
+            itemTimeLeft--;
+            hudTimer.textContent = `⏳ เวลา: ${itemTimeLeft} วินาที`;
+
+            if (itemTimeLeft <= 0) {
+                // เคสหมดเวลา: บังคับเฉลยข้อนั้นว่าผิดทันที
+                lockSelection = true;
+                triggerSound('wrong');
+                if (boxLeft.dataset.isCorrect === "yes") boxLeft.classList.add('correct');
+                if (boxRight.dataset.isCorrect === "yes") boxRight.classList.add('correct');
+
+                setTimeout(() => {
+                    currentIdx++;
+                    presentQuestion();
+                }, 2500);
+            }
+        }, 1000);
+    }
+
+    // --- การสลับหน้าจอและสเตทเกม ---
+    function initiateGame() {
+        currentIdx = 0;
+        totalScore = 0;
+        correctCount = 0;
+        isGameRunning = true;
+
+        hudScore.textContent = `🏆 คะแนน: ${totalScore}`;
+        
+        startScreen.classList.add('hide');
+        endScreen.classList.add('hide');
+        playScreen.classList.remove('hide');
+
+        presentQuestion();
+        clearInterval(timerInterval);
+        runTimerEngine();
+    }
+
+    function finishGame() {
+        isGameRunning = false;
+        clearInterval(timerInterval);
+
+        scoreTotal.textContent = totalScore;
+        scoreFeedback.textContent = `ตอบถูกทั้งหมด ${correctCount} จาก ${quizBank.length} ข้อ`;
+
+        if (correctCount === 10) praiseTxt.textContent = "💯 ยอดเยี่ยมขั้นเทพ! ถูกต้องครบถ้วน";
+        else if (correctCount >= 7) praiseTxt.textContent = "🌟 เก่งมากเลย! เข้าใจเรื่องจำนวนเต็มเป็นอย่างดี";
+        else if (correctCount >= 5) praiseTxt.textContent = "👍 ผ่านเกณฑ์! หมั่นฝึกฝนบ่อยๆ นะครับ";
+        else praiseTxt.textContent = "✌️ ลองใหม่อีกครั้งนะ ฝึกฝนเพิ่มเติมจะเก่งขึ้นแน่นอน!";
+
+        playScreen.classList.add('hide');
+        endScreen.classList.remove('hide');
+    }
+
+    // ผูกคำสั่งปุ่มแอ็กชัน
+    document.getElementById('btn-start').addEventListener('click', initiateGame);
+    document.getElementById('btn-restart').addEventListener('click', initiateGame);
+</script>
+
+</body>
+</html>
